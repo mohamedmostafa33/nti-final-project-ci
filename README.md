@@ -21,7 +21,7 @@ Git is used as the **single source of truth**, ensuring consistency, traceabilit
 
 ## 🏗️ Architecture Diagram
 
-![DevSecOps Architecture](images/architecture.webp)
+<img width="2260" height="1100" alt="image" src="https://github.com/user-attachments/assets/7ec1b12b-6a65-4942-8a8f-68567adf2041" />
 
 **Flow Summary:**
 
