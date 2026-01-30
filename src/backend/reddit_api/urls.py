@@ -28,7 +28,7 @@ urlpatterns = [
     path('health/liveness/', liveness_check, name='liveness_check'),
     
     # Prometheus metrics endpoint
-    path('metrics/', include('django_prometheus.urls')),
+    path('', include('django_prometheus.urls')),
     
     # API endpoints
     path('api/users/', include('users.urls')),
