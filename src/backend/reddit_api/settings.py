@@ -15,32 +15,46 @@ from datetime import timedelta
 import os
 from decouple import config, Csv
 import dj_database_url
+import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# Env Configuration
+env = environ.Env(
+    DJANGO_DEBUG=(bool),
+    DJANGO_SECURE=(bool),
+)
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-sl+$a30czv6rh^=3pc7jk)urk%%7)&f(kqzatn0ozk!*3@$%5$')
+SECRET_KEY = env('DJANGO_SECRET_KEY')
+# config('SECRET_KEY', default='django-insecure-sl+$a30czv6rh^=3pc7jk)urk%%7)&f(kqzatn0ozk!*3@$%5$')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = env.bool('DJANGO_DEBUG')
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS')
 
+# CORS settings
+CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
 
 INSTALLED_APPS = [
+    'django_prometheus',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'storages',
     
     # Third party apps
     'rest_framework',
@@ -55,14 +69,15 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 ROOT_URLCONF = 'reddit_api.urls'
@@ -91,12 +106,12 @@ WSGI_APPLICATION = 'reddit_api.wsgi.application'
 
 # Use SQLite for development, can be switched to RDS for production
 DATABASES = {
-    'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
-        conn_max_age=600
-    )
+    'default': env.db(),
 }
 
+# Prometheus Database Monitoring
+if 'django_prometheus' in INSTALLED_APPS:
+    DATABASES['default']['ENGINE'] = 'django_prometheus.db.backends.sqlite3'
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -147,6 +162,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
 
+# Email backend (console in dev, configurable in prod)
+EMAIL_BACKEND = env('DJANGO_EMAIL_BACKEND')
+
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -170,22 +188,52 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS settings
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://127.0.0.1:3000',
-    cast=Csv()
-)
-CORS_ALLOW_CREDENTIALS = True
+# Security settings for production
+SECURE_MODE = env.bool('DJANGO_SECURE')
+if SECURE_MODE:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = env.int('DJANGO_HSTS_SECONDS')
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Frontend URL for password reset links
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+# AWS S3 Settings - Use S3 for storage if configured
+USE_S3 = env.bool('USE_S3')
 
-# Email settings (for production - configure SMTP)
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='localhost')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@redditclone.com')
+
+if USE_S3:
+    # AWS S3 Settings
+    AWS_STORAGE_BUCKET_NAME = env('AWS_BUCKET_NAME')
+    AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
+    AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME')
+    AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN')
+    AWS_DEFAULT_ACL = None
+    AWS_S3_OBJECT_PARAMETERS = {
+        'CacheControl': 'max-age=86400',
+    }
+    AWS_QUERYSTRING_AUTH = False
+
+    # Django 4.2+ STORAGES configuration for S3
+    STORAGES = {
+        "default": {
+            "BACKEND": "reddit_api.storage_backends.MediaStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "reddit_api.storage_backends.StaticStorage",
+        },
+    }
+
+    # Django 4.1 fallback so uploads use S3 (STORAGES is ignored before 4.2)
+    DEFAULT_FILE_STORAGE = "reddit_api.storage_backends.MediaStorage"
+    STATICFILES_STORAGE = "reddit_api.storage_backends.StaticStorage"
+
+    # URLs for media and static files from S3
+    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+else:
+    # Local file storage (development)
+    STATIC_URL = '/static/'
+    MEDIA_URL = '/media/'

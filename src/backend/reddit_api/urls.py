@@ -18,9 +18,19 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from .views import readiness_check, liveness_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Health check endpoints for Kubernetes
+    path('health/readiness/', readiness_check, name='readiness_check'),
+    path('health/liveness/', liveness_check, name='liveness_check'),
+    
+    # Prometheus metrics endpoint
+    path('metrics/', include('django_prometheus.urls')),
+    
+    # API endpoints
     path('api/users/', include('users.urls')),
     path('api/communities/', include('communities.urls')),
     path('api/posts/', include('posts.urls')),
