@@ -26,3 +26,13 @@ pytest-django==4.9.0
 pytest-cov==6.0.0
 coverage==7.10.7
 factory-boy==3.3.1
+
+# Django Environment
+django-environ==0.11.2
+
+# Monitoring & Metrics
+django-prometheus==2.3.1
+
+# AWS S3 & RDS
+boto3==1.42.30
+django-storages==1.14.6
