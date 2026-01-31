@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+.next
+.env*.local
+README.md
+.vscode
+.idea
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+coverage
+.nyc_output
