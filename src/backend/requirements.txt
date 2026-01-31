@@ -33,6 +33,9 @@ django-environ==0.11.2
 # Monitoring & Metrics
 django-prometheus==2.3.1
 
-# AWS S3 & RDS
+# AWS S3 & Storage
 boto3==1.42.30
 django-storages==1.14.6
+
+# Gunicorn server
+gunicorn==20.1.0
