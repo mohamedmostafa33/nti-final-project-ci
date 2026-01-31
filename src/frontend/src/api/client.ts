@@ -70,6 +70,8 @@ export const authAPI = {
   
   refreshToken: (refresh: string) =>
     api.post('/users/token/refresh/', { refresh }),
+  
+
 };
 
 // Communities APIs

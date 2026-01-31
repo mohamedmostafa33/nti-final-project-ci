@@ -43,6 +43,11 @@ ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS')
 
 # CORS settings
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env.list('DJANGO_CORS_ALLOWED_ORIGINS', default=[])
+
+# For development, allow all origins (remove in production)
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 # Application definition
 
@@ -70,6 +75,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -225,10 +231,6 @@ if USE_S3:
             "BACKEND": "reddit_api.storage_backends.StaticStorage",
         },
     }
-
-    # Django 4.1 fallback so uploads use S3 (STORAGES is ignored before 4.2)
-    DEFAULT_FILE_STORAGE = "reddit_api.storage_backends.MediaStorage"
-    STATICFILES_STORAGE = "reddit_api.storage_backends.StaticStorage"
 
     # URLs for media and static files from S3
     STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'

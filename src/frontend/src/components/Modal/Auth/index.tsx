@@ -14,7 +14,6 @@ import { authModalState } from "../../../atoms/authModalAtom";
 import { userState } from "../../../atoms/userAtom";
 import AuthInputs from "./Inputs";
 import OAuthButtons from "./OAuthButtons";
-import ResetPassword from "./ResetPassword";
 import ModalWrapper from "../ModalWrapper";
 
 type AuthModalProps = {};
@@ -50,7 +49,6 @@ const AuthModal: React.FC<AuthModalProps> = () => {
       <ModalHeader display="flex" flexDirection="column" alignItems="center">
         {modalState.view === "login" && "Login"}
         {modalState.view === "signup" && "Sign Up"}
-        {modalState.view === "resetPassword" && "Reset Password"}
       </ModalHeader>
       <ModalCloseButton />
       <ModalBody
@@ -66,15 +64,11 @@ const AuthModal: React.FC<AuthModalProps> = () => {
           justifyContent="center"
           width="70%"
         >
-          {modalState.view === "login" || modalState.view === "signup" ? (
-            <>
-              <OAuthButtons />
-              OR
-              <AuthInputs toggleView={toggleView} />
-            </>
-          ) : (
-            <ResetPassword toggleView={toggleView} />
-          )}
+          <>
+            <OAuthButtons />
+            OR
+            <AuthInputs toggleView={toggleView} />
+          </>
           {/* // Will implement at end of tutorial */}
           {/* {user && !currentUser && (
                 <>

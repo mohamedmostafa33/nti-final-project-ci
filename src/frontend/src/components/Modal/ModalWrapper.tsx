@@ -14,6 +14,7 @@ import React from "react";
 type ModalWrapperProps = {
   isOpen: boolean;
   onClose: () => void;
+  children?: React.ReactNode;
 };
 
 const ModalWrapper: React.FC<ModalWrapperProps> = ({
