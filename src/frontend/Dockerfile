@@ -1,10 +1,11 @@
 # ==============================================================================
 # Stage 1: Dependencies - Install all node_modules
 # ==============================================================================
-FROM node:18-alpine AS deps
+FROM node:18-alpine3.21 AS deps
 
-# Install libc6-compat for Alpine compatibility
-RUN apk add --no-cache libc6-compat
+# Security: Update OpenSSL to fix CVE-2025-15467, CVE-2025-69419, CVE-2025-69421
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache libc6-compat libcrypto3>=3.3.6-r0 libssl3>=3.3.6-r0
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +19,10 @@ RUN npm ci --legacy-peer-deps
 # ==============================================================================
 # Stage 2: Builder - Build the Next.js application
 # ==============================================================================
-FROM node:18-alpine AS builder
+FROM node:18-alpine3.21 AS builder
+
+# Security: Update OpenSSL
+RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
@@ -38,7 +42,11 @@ RUN npm run build
 # ==============================================================================
 # Stage 3: Runner - Create minimal production image
 # ==============================================================================
-FROM node:18-alpine AS runner
+FROM node:18-alpine3.21 AS runner
+
+# Security: Update OpenSSL to fix CVE-2025-15467, CVE-2025-69419, CVE-2025-69421
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache libcrypto3>=3.3.6-r0 libssl3>=3.3.6-r0
 
 WORKDIR /app
 
