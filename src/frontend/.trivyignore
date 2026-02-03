@@ -33,6 +33,17 @@ CVE-2026-24842
 # Risk: LOW - Only affects development/build time
 CVE-2024-21538
 
+# -----------------------------------------------------------------------------
+# Next.js Application Vulnerabilities
+# -----------------------------------------------------------------------------
+
+# Next.js DoS via HTTP request deserialization with PPR
+# GHSA-h25m-26qc-wcjf - Affects Next.js 14.x
+# Risk: MODERATE - Requires specific PPR (Partial Prerendering) configuration
+# Mitigation: PPR is not enabled in production configuration
+# Status: Monitoring for patch, upgrading to Next.js 15 causes reload loops
+GHSA-h25m-26qc-wcjf
+
 # =============================================================================
 # Instructions for maintenance:
 # - Review ignored CVEs quarterly
