@@ -173,26 +173,18 @@ const Home: NextPage = () => {
     if (user) {
       getUserHomePosts();
     }
-  }, [user, communityStateValue.initSnippetsFetched]);
+  }, [user?.id, communityStateValue.initSnippetsFetched]);
 
   useEffect(() => {
     if (!user) {
       getNoUserHomePosts();
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user || !postStateValue.posts.length) return;
     getUserPostVotes();
-
-    // Clear postVotes on dismount
-    return () => {
-      setPostStateValue((prev) => ({
-        ...prev,
-        postVotes: [],
-      }));
-    };
-  }, [postStateValue.posts, user]);
+  }, [user?.id, postStateValue.posts.length]);
 
   return (
     <PageContentLayout>

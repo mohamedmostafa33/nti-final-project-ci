@@ -184,7 +184,7 @@ const usePosts = (communityData?: Community) => {
   useEffect(() => {
     if (!user || !communityStateValue.currentCommunity || !communityStateValue.currentCommunity.id) return;
     getCommunityPostVotes(communityStateValue.currentCommunity.id);
-  }, [user, communityStateValue.currentCommunity]);
+  }, [user?.id, communityStateValue.currentCommunity.id]);
 
   useEffect(() => {
     // Logout or no authenticated user
@@ -195,7 +195,7 @@ const usePosts = (communityData?: Community) => {
       }));
       return;
     }
-  }, [user]);
+  }, [user?.id]);
 
   return {
     postStateValue,

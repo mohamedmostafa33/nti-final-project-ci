@@ -29,7 +29,7 @@ const useAuth = () => {
     } else {
       setLoading(false);
     }
-  }, []);
+  }, []); // Empty dependency array - only run once on mount
 
   return { user: currentUser, loading };
 };

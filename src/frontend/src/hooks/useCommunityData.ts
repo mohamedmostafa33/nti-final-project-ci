@@ -23,7 +23,7 @@ const useCommunityData = (ssrCommunityData?: boolean) => {
   useEffect(() => {
     if (!user || !!communityStateValue.mySnippets.length) return;
     getSnippets();
-  }, [user]);
+  }, [user?.id]);
 
   const getSnippets = async () => {
     setLoading(true);
@@ -148,18 +148,18 @@ const useCommunityData = (ssrCommunityData?: boolean) => {
     if (community) {
       const communityData = communityStateValue.currentCommunity;
 
-      if (!communityData.id) {
+      if (!communityData.id || communityData.id !== community) {
         getCommunityData(community as string);
         return;
       }
-    } else {
-      // Reset to default when not viewing a community
+    } else if (communityStateValue.currentCommunity.id) {
+      // Reset to default when not viewing a community (only if not already default)
       setCommunityStateValue((prev) => ({
         ...prev,
         currentCommunity: defaultCommunity,
       }));
     }
-  }, [router.query, communityStateValue.currentCommunity]);
+  }, [router.query.community, communityStateValue.currentCommunity.id]);
 
   return {
     communityStateValue,
