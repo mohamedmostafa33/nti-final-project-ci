@@ -13,10 +13,10 @@ class CommentListView(generics.ListAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
     
     def get_queryset(self):
-        post_id = self.request.query_params.get('post_id')
+        post_id = self.request.query_params.get('post')
         if post_id:
             return Comment.objects.filter(post_id=post_id).select_related('creator', 'post')
-        return Comment.objects.none()
+        return Comment.objects.all().select_related('creator', 'post')
 
 
 class CommentCreateView(generics.CreateAPIView):
@@ -25,8 +25,16 @@ class CommentCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     
     def perform_create(self, serializer):
-        post_id = self.request.data.get('post_id')
-        post = get_object_or_404(Post, id=post_id)
+        post_id = self.request.data.get('post')
+        if not post_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'post': 'This field is required.'})
+        
+        try:
+            post = Post.objects.get(id=post_id)
+        except Post.DoesNotExist:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'post': 'Invalid post ID.'})
         
         # Increment comment count
         post.number_of_comments += 1
@@ -45,13 +53,13 @@ class CommentDeleteView(generics.DestroyAPIView):
     queryset = Comment.objects.all()
     permission_classes = [IsAuthenticated]
     
-    def perform_destroy(self, instance):
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        
         # Only creator can delete
-        if instance.creator != self.request.user:
-            return Response(
-                {'error': 'Not authorized'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        if instance.creator != request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Not authorized')
         
         # Decrement comment count
         post = instance.post
@@ -59,3 +67,4 @@ class CommentDeleteView(generics.DestroyAPIView):
         post.save()
         
         instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

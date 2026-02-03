@@ -45,7 +45,11 @@ class PostCreateView(generics.CreateAPIView):
         if not community_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'community_id': 'This field is required.'})
-        community = get_object_or_404(Community, id=community_id)
+        try:
+            community = Community.objects.get(id=community_id)
+        except Community.DoesNotExist:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'community_id': 'Community does not exist.'})
         serializer.save(creator=self.request.user, community=community)
 
 
@@ -58,10 +62,8 @@ class PostDetailView(generics.RetrieveDestroyAPIView):
     def perform_destroy(self, instance):
         # Only creator can delete
         if instance.creator != self.request.user:
-            return Response(
-                {'error': 'Not authorized'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Not authorized')
         instance.delete()
 
 

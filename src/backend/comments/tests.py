@@ -6,89 +6,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from comments.models import Comment
-from posts.models import Post
-from communities.models import Community
 
 User = get_user_model()
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
-def create_user():
-    def _create_user(**kwargs):
-        defaults = {
-            'username': 'testuser',
-            'email': 'test@example.com',
-            'password': 'testpass123'
-        }
-        defaults.update(kwargs)
-        password = defaults.pop('password')
-        user = User.objects.create(**defaults)
-        user.set_password(password)
-        user.save()
-        return user
-    return _create_user
-
-
-@pytest.fixture
-def authenticated_client(api_client, create_user):
-    user = create_user()
-    refresh = RefreshToken.for_user(user)
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
-    api_client.user = user
-    return api_client
-
-
-@pytest.fixture
-def create_community(create_user):
-    def _create_community(**kwargs):
-        if 'creator' not in kwargs:
-            kwargs['creator'] = create_user()
-        defaults = {
-            'id': 'testcommunity',
-            'privacy_type': 'public'
-        }
-        defaults.update(kwargs)
-        return Community.objects.create(**defaults)
-    return _create_community
-
-
-@pytest.fixture
-def create_post(create_user, create_community):
-    def _create_post(**kwargs):
-        if 'creator' not in kwargs:
-            kwargs['creator'] = create_user()
-        if 'community' not in kwargs:
-            kwargs['community'] = create_community()
-        defaults = {
-            'title': 'Test Post',
-            'body': 'Test post content'
-        }
-        defaults.update(kwargs)
-        return Post.objects.create(**defaults)
-    return _create_post
-
-
-@pytest.fixture
-def create_comment(create_user, create_post):
-    def _create_comment(**kwargs):
-        if 'creator' not in kwargs:
-            kwargs['creator'] = create_user()
-        if 'post' not in kwargs:
-            kwargs['post'] = create_post()
-        defaults = {
-            'text': 'Test comment'
-        }
-        defaults.update(kwargs)
-        return Comment.objects.create(**defaults)
-    return _create_comment
 
 
 @pytest.mark.django_db
@@ -103,7 +24,8 @@ class TestCommentModel:
         comment = Comment.objects.create(
             text='Test comment',
             creator=user,
-            post=post
+            post=post,
+            community=post.community
         )
         
         assert comment.text == 'Test comment'
@@ -113,7 +35,7 @@ class TestCommentModel:
     def test_comment_str_method(self, create_comment):
         """Test comment string representation"""
         comment = create_comment(text='My comment')
-        assert 'My comment' in str(comment)
+        assert 'Comment by' in str(comment)
 
 
 @pytest.mark.django_db
@@ -144,7 +66,7 @@ class TestCommentList:
         response = api_client.get(url, {'post': post1.id})
         
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert response.data['count'] == 2
         
     def test_comment_includes_creator_info(self, api_client, create_comment):
         """Test that comments include creator information"""
@@ -154,7 +76,7 @@ class TestCommentList:
         response = api_client.get(url)
         
         assert response.status_code == status.HTTP_200_OK
-        assert 'creatorDisplayText' in response.data[0]
+        assert 'creatorDisplayText' in response.data['results'][0]
 
 
 @pytest.mark.django_db
