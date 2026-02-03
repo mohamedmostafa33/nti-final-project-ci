@@ -63,6 +63,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r ./src/backend/requirements.txt
 
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'nti-final-project-backend'
+          path: './src/backend/requirements.txt'
+          format: 'HTML'
+          args: >
+            --enableRetired
+            --failOnCVSS 7
+
       - name: Create .env file
         working-directory: ./src/backend
         run: |
@@ -123,7 +133,7 @@ jobs:
         run: |
           docker build -t backend-app:v${{ env.COMMIT_SHA }} .
 
-      - name: Scan Docker image for vulnerabilities
+      - name: Trivy - Scan Docker Image for Vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: backend-app:v${{ env.COMMIT_SHA }}
