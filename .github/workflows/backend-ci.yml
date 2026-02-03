@@ -1,0 +1,119 @@
+name: Backend CI
+
+on: 
+  workflow_dispatch:
+
+env:
+  USE_S3: False
+
+jobs:
+
+  detect-changes:
+    name: Detect Backend Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.backend_changes.outputs.backend }}
+                     
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for backend changes
+        id: backend_changes
+        uses:  actions/path-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'src/backend/**'
+
+      - name: Show backend change status
+        run: |
+          echo "Backend changed: ${{ steps.backend_changes.outputs.backend }}"
+  
+  backend-build:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.backend_changed == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ./src/backend/requirements.txt
+     
+      - name: Create .env file
+        working-directory: ./src/backend
+        run: |
+          cat > .env << EOF
+          USE_S3=${{ env.USE_S3 }}
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          EOF
+
+      - name: Run pytest with coverage
+        working-directory: ./src/backend
+        run: |
+          pytest --cov --cov-report=term-missing --cov-report=xml:coverage.xml
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          projectBaseDir: src/backend
+          args: >
+            -Dsonar.projectKey=nti-final-project-backend
+            -Dsonar.projectName=NTI Final Project - Backend
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.python.version=3.12
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate Check
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Collect static files
+        working-directory: ./src/backend
+        run: |
+          python manage.py collectstatic --noinput
+
+      - name: Get commit short SHA
+        id: get_sha
+        run: echo "COMMIT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Docker image build
+        working-directory: ./src/backend
+        run: |
+          docker build -t backend-app:v${{ env.COMMIT_SHA }} .
+
+      - name: Tag Docker image
+        working-directory: ./src/backend
+        run: |
+          docker tag backend-app:v${{ env.COMMIT_SHA }} mohamedmostafa33/reddit-backend:v${{ env.COMMIT_SHA }}
+
+      - name: Docker login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Push Docker image
+        working-directory: ./src/backend
+        run: |
+          docker push mohamedmostafa33/reddit-backend:v${{ env.COMMIT_SHA }}
