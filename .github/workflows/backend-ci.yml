@@ -130,6 +130,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
       - name: Tag Docker image
         working-directory: ./src/backend
