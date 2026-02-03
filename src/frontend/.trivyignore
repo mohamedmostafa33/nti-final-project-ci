@@ -1,0 +1,41 @@
+# =============================================================================
+# Trivy Ignore File - Frontend
+# =============================================================================
+# This file contains vulnerabilities that are accepted risks or cannot be 
+# fixed due to dependencies on system packages or upstream issues.
+# Review this file regularly and remove entries when fixes become available.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# NPM Global Packages (from Node.js Alpine base image)
+# -----------------------------------------------------------------------------
+# These vulnerabilities exist in npm's global dependencies that ship with 
+# Node.js Alpine image. They cannot be fixed without updating Node.js itself.
+# These packages are used by npm CLI, not in runtime application code.
+# Risk: LOW - Not exposed in production runtime
+
+# glob package in npm global dependencies
+# Used by npm CLI only, not in application runtime
+CVE-2025-64756
+
+# tar package in npm global dependencies  
+# Used by npm CLI only, not in application runtime
+CVE-2026-23745
+CVE-2026-23950
+CVE-2026-24842
+
+# -----------------------------------------------------------------------------
+# Development Dependencies with Low Risk
+# -----------------------------------------------------------------------------
+
+# cross-spawn - ReDoS vulnerability
+# Used in build process only, not in production runtime
+# Risk: LOW - Only affects development/build time
+CVE-2024-21538
+
+# =============================================================================
+# Instructions for maintenance:
+# - Review ignored CVEs quarterly
+# - Remove entries when patches become available
+# - Document business justification for each ignore
+# =============================================================================
