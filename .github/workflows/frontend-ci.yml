@@ -129,7 +129,9 @@ jobs:
       - name: Docker image build
         working-directory: ./src/frontend
         run: |
-          docker build -t reddit-frontend:${{ env.COMMIT_SHA }} .
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
+            -t reddit-frontend:${{ env.COMMIT_SHA }} .
 
       - name: Trivy - Scan Docker Image for Vulnerabilities
         uses: aquasecurity/trivy-action@master
