@@ -159,3 +159,38 @@ jobs:
       - name: Push Docker image to ECR
         run: |
           docker push ${{ secrets.AWS_ECR_ACCOUNT_URL }}/reddit-frontend:${{ env.COMMIT_SHA }}
+
+      - name: Update Helm Values in CD Repository
+        env:
+          CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
+          CD_REPO_URL: ${{ secrets.CD_REPO_URL }}
+        run: |
+          # Clone the CD repository
+          git clone https://${CD_REPO_TOKEN}@github.com/${CD_REPO_URL}.git cd-repo
+          cd cd-repo
+          
+          # Configure git
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Update the frontend image tag in values.yaml
+          NEW_IMAGE="${{ secrets.AWS_ECR_ACCOUNT_URL }}/reddit-frontend:${{ env.COMMIT_SHA }}"
+          
+          # Use yq to update the image value (install yq first)
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          
+          # Update the deployment.image in frontend values.yaml
+          yq -i '.deployment.image = "'"${NEW_IMAGE}"'"' helm-charts/frontend/values.yaml
+          
+          # Commit and push changes
+          git add helm-charts/frontend/values.yaml
+          git commit -m "chore(frontend): update image tag to ${{ env.COMMIT_SHA }}
+
+          Automated update from CI pipeline
+          Commit: ${{ github.sha }}
+          Run: ${{ github.run_id }}"
+          
+          git push origin main
+          
+          echo "Successfully updated frontend image to: ${NEW_IMAGE}"

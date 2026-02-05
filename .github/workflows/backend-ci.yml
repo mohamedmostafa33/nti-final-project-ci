@@ -154,6 +154,45 @@ jobs:
         run: |
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_ACCOUNT_URL }}
 
+      - name: Tag Docker image for ECR
+        run: |
+          docker tag backend-app:${{ env.COMMIT_SHA }} ${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}
+
       - name: Push Docker image to ECR
         run: |
           docker push ${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}
+
+      - name: Update Helm Values in CD Repository
+        env:
+          CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
+          CD_REPO_URL: ${{ secrets.CD_REPO_URL }}
+        run: |
+          # Clone the CD repository
+          git clone https://${CD_REPO_TOKEN}@github.com/${CD_REPO_URL}.git cd-repo
+          cd cd-repo
+          
+          # Configure git
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Update the backend image tag in values.yaml
+          NEW_IMAGE="${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}"
+          
+          # Use yq to update the image value (install yq first)
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          
+          # Update the deployment.image in backend values.yaml
+          yq -i '.deployment.image = "'"${NEW_IMAGE}"'"' helm-charts/backend/values.yaml
+          
+          # Commit and push changes
+          git add helm-charts/backend/values.yaml
+          git commit -m "chore(backend): update image tag to ${{ env.COMMIT_SHA }}
+
+          Automated update from CI pipeline
+          Commit: ${{ github.sha }}
+          Run: ${{ github.run_id }}"
+          
+          git push origin main
+          
+          echo "Successfully updated backend image to: ${NEW_IMAGE}"
