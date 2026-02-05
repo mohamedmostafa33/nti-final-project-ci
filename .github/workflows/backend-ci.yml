@@ -13,7 +13,7 @@ on:
           - 'False'
 
 env:
-  USE_S3: False
+  USE_S3: True
   AWS_REGION: us-east-1
 
 jobs:
