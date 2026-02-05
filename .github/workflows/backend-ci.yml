@@ -85,6 +85,11 @@ jobs:
           DJANGO_ALLOWED_HOSTS=*
           DJANGO_SECURE=False
           DJANGO_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+          AWS_S3_REGION_NAME=${{ env.AWS_REGION }}
+          AWS_S3_CUSTOM_DOMAIN=${{ secrets.AWS_S3_CUSTOM_DOMAIN }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           EOF
       
       - name: Run migrations
