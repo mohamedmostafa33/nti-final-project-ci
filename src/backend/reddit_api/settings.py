@@ -116,8 +116,13 @@ DATABASES = {
 }
 
 # Prometheus Database Monitoring
+# Note: Using appropriate backend based on database type
 if 'django_prometheus' in INSTALLED_APPS:
-    DATABASES['default']['ENGINE'] = 'django_prometheus.db.backends.sqlite3'
+    db_engine = DATABASES['default'].get('ENGINE', '')
+    if 'postgresql' in db_engine:
+        DATABASES['default']['ENGINE'] = 'django_prometheus.db.backends.postgresql'
+    elif 'sqlite' in db_engine:
+        DATABASES['default']['ENGINE'] = 'django_prometheus.db.backends.sqlite3'
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
