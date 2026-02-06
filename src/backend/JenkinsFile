@@ -1,124 +1,263 @@
 pipeline {
-  agent any
+    agent any
 
-  parameters {
-    choice(
-      name: 'BUILD_BACKEND',
-      choices: ['True', 'False'],
-      description: 'Trigger backend build and tests'
-    )
-  }
-
-  environment {
-    USE_S3 = 'False'
-    AWS_REGION = 'us-east-1'
-  }
-
-  stages {
-    stage('Detect Backend Changes') {
-      steps {
-        checkout scm
-        script {
-          def baseRef = env.CHANGE_TARGET ? "origin/${env.CHANGE_TARGET}" : (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1')
-          sh "git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/* >/dev/null 2>&1 || true"
-          def changes = sh(
-            script: "git diff --name-only ${baseRef}...HEAD -- 'src/backend/**'",
-            returnStdout: true
-          ).trim()
-          env.BACKEND_CHANGED = changes ? 'true' : 'false'
-          echo "Backend changed: ${env.BACKEND_CHANGED}"
-        }
-      }
+    parameters {
+        choice(
+            name: 'BUILD_BACKEND',
+            choices: ['False', 'True'],
+            description: 'Trigger backend build and tests'
+        )
     }
 
-    stage('Build and Test Backend') {
-      when {
-        expression {
-          return env.BACKEND_CHANGED == 'true' || params.BUILD_BACKEND == 'True'
-        }
-      }
-      steps {
-        checkout scm
-        sh '''
-          python3.12 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install -r ./src/backend/requirements.txt
-        '''
-        sh '''
-          dependency-check.sh \
-            --project "nti-final-project-backend" \
-            --scan "./src/backend/requirements.txt" \
-            --format "HTML" \
-            --enableRetired \
-            --failOnCVSS 7
-        '''
-        withCredentials([
-          string(credentialsId: 'DJANGO_SECRET_KEY', variable: 'DJANGO_SECRET_KEY')
-        ]) {
-          sh '''
-            cd ./src/backend
-            cat > .env << EOF
-            USE_S3=${USE_S3}
-            DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-            DJANGO_DEBUG=True
-            DATABASE_URL=sqlite:///./db.sqlite3
-            DJANGO_ALLOWED_HOSTS=*
-            DJANGO_SECURE=False
-            DJANGO_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
-            EOF
-          '''
-        }
-        sh '''
-          cd ./src/backend
-          . ../.venv/bin/activate
-          python manage.py migrate
-        '''
-        sh '''
-          cd ./src/backend
-          . ../.venv/bin/activate
-          pytest --cov --cov-report=term-missing --cov-report=xml:coverage.xml
-        '''
-        withSonarQubeEnv('SonarQube') {
-          sh '''
-            cd src/backend
-            sonar-scanner \
-              -Dsonar.projectKey=nti-final-project-backend \
-              -Dsonar.projectName="NTI Final Project - Backend" \
-              -Dsonar.sources=. \
-              -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**,**/.pytest_cache/**,**/media/**,**/*.coverage,**/coverage.xml,**/*.sqlite3,**/.env*,**/.gitignore,**/.dockerignore,**/*.pyc,**/*.pyo,**/conftest.py,**/pytest.ini,**/.coveragerc,**/run_tests.sh,**/*.md \
-              -Dsonar.python.coverage.reportPaths=coverage.xml \
-              -Dsonar.python.version=3.12
-          '''
-        }
-        timeout(time: 10, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
-        sh '''
-          cd ./src/backend
-          . ../.venv/bin/activate
-          python manage.py collectstatic --noinput
-        '''
-        script {
-          env.COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-        }
-        sh '''
-          cd ./src/backend
-          docker build -t backend-app:${COMMIT_SHA} .
-        '''
-        sh '''
-          trivy image --format table --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed backend-app:${COMMIT_SHA}
-        '''
-        withCredentials([
-          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'AWS_ECR_CREDS'],
-          string(credentialsId: 'AWS_ECR_ACCOUNT_URL', variable: 'AWS_ECR_ACCOUNT_URL')
-        ]) {
-          sh '''
-            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ECR_ACCOUNT_URL}
-            docker push ${AWS_ECR_ACCOUNT_URL}/backend-app:${COMMIT_SHA}
-          '''
-        }
-      }
+    environment {
+        USE_S3        = 'True'
+        AWS_REGION    = 'us-east-1'
+        BACKEND_CHANGED = 'false'
+        COMMIT_SHA      = ''
     }
-  }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Detect Backend Changes') {
+            steps {
+                script {
+                    /*
+                     الفرق الجوهري هنا:
+                     - استخدام origin/main...HEAD بدلاً من HEAD~1 HEAD
+                     - هذا يغطي:
+                       * أول build
+                       * force push
+                       * manual builds
+                       * shallow clone
+                    */
+                    def changes = sh(
+                        script: '''
+                            git fetch origin main || true
+                            git diff --name-only origin/main...HEAD | grep '^src/backend/' || true
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    if (changes) {
+                        env.BACKEND_CHANGED = 'true'
+                        echo "Backend changes detected"
+                    } else {
+                        env.BACKEND_CHANGED = 'false'
+                        echo "No backend changes detected"
+                    }
+
+                    echo "Backend changed: ${env.BACKEND_CHANGED}"
+                }
+            }
+        }
+
+        stage('Build and Test Backend') {
+            when {
+                expression {
+                    env.BACKEND_CHANGED == 'true' || params.BUILD_BACKEND == 'True'
+                }
+            }
+
+            stages {
+
+                stage('Setup Python & Install Dependencies') {
+                    steps {
+                        sh '''
+                            python3 --version
+                            python3 -m pip install --upgrade pip
+                            pip install -r ./src/backend/requirements.txt
+                        '''
+                    }
+                }
+
+                stage('OWASP Dependency Check') {
+                    steps {
+                        dependencyCheck additionalArguments: '''
+                            --project "nti-final-project-backend"
+                            --scan ./src/backend/requirements.txt
+                            --format HTML
+                            --enableRetired
+                            --failOnCVSS 7
+                        ''', odcInstallation: 'dependency-check'
+                    }
+                }
+
+                stage('Create .env File') {
+                    steps {
+                        dir('src/backend') {
+                            writeFile file: '.env', text: """USE_S3=${env.USE_S3}
+DJANGO_SECRET_KEY=${env.DJANGO_SECRET_KEY}
+DJANGO_DEBUG=True
+DATABASE_URL=sqlite:///./db.sqlite3
+DJANGO_ALLOWED_HOSTS=*
+DJANGO_SECURE=False
+DJANGO_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+AWS_BUCKET_NAME=${env.AWS_BUCKET_NAME}
+AWS_S3_REGION_NAME=${env.AWS_REGION}
+AWS_S3_CUSTOM_DOMAIN=${env.AWS_S3_CUSTOM_DOMAIN}
+AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}
+AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}
+"""
+                        }
+                    }
+                }
+
+                stage('Run Migrations') {
+                    steps {
+                        dir('src/backend') {
+                            sh 'python3 manage.py migrate'
+                        }
+                    }
+                }
+
+                stage('Run Tests with Coverage') {
+                    steps {
+                        dir('src/backend') {
+                            sh 'pytest --cov --cov-report=term-missing --cov-report=xml:coverage.xml'
+                        }
+                    }
+                }
+
+                stage('SonarQube Analysis') {
+                    steps {
+                        script {
+                            def scannerHome = tool 'SonarQubeScanner'
+                            withSonarQubeEnv('SonarQube') {
+                                sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=nti-final-project-backend \
+                                  -Dsonar.projectName="NTI Final Project - Backend" \
+                                  -Dsonar.projectBaseDir=src/backend \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**,**/.pytest_cache/**,**/media/**,**/*.coverage,**/coverage.xml,**/*.sqlite3,**/.env*,**/.gitignore,**/.dockerignore,**/*.pyc,**/*.pyo,**/conftest.py,**/pytest.ini,**/.coveragerc,**/run_tests.sh,**/*.md \
+                                  -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                  -Dsonar.python.version=3.12
+                                """
+                            }
+                        }
+                    }
+                }
+
+                stage('SonarQube Quality Gate') {
+                    steps {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
+                    }
+                }
+
+                stage('Collect Static Files') {
+                    steps {
+                        dir('src/backend') {
+                            sh 'python3 manage.py collectstatic --noinput'
+                        }
+                    }
+                }
+
+                stage('Build Docker Image') {
+                    steps {
+                        script {
+                            env.COMMIT_SHA = sh(
+                                script: 'git rev-parse --short HEAD',
+                                returnStdout: true
+                            ).trim()
+
+                            dir('src/backend') {
+                                sh "docker build -t reddit-backend:${env.COMMIT_SHA} ."
+                            }
+                        }
+                    }
+                }
+
+                stage('Trivy Security Scan') {
+                    steps {
+                        sh """
+                        trivy image \
+                          --severity CRITICAL,HIGH \
+                          --exit-code 1 \
+                          --ignore-unfixed \
+                          --ignorefile src/backend/.trivyignore \
+                          reddit-backend:${env.COMMIT_SHA}
+                        """
+                    }
+                }
+
+                stage('Push Image to ECR') {
+                    steps {
+                        withCredentials([
+                            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                            string(credentialsId: 'aws-ecr-account-url', variable: 'AWS_ECR_ACCOUNT_URL')
+                        ]) {
+                            sh """
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                              docker login --username AWS --password-stdin ${AWS_ECR_ACCOUNT_URL}
+
+                            docker tag reddit-backend:${COMMIT_SHA} \
+                              ${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
+
+                            docker push ${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
+                            """
+                        }
+                    }
+                }
+
+                stage('Update CD Repository') {
+                    steps {
+                        withCredentials([
+                            string(credentialsId: 'cd-repo-token', variable: 'CD_REPO_TOKEN'),
+                            string(credentialsId: 'cd-repo-url', variable: 'CD_REPO_URL'),
+                            string(credentialsId: 'aws-ecr-account-url', variable: 'AWS_ECR_ACCOUNT_URL')
+                        ]) {
+                            sh """
+                            rm -rf cd-repo
+                            git clone https://${CD_REPO_TOKEN}@github.com/${CD_REPO_URL}.git cd-repo
+                            cd cd-repo
+
+                            git config user.name "Jenkins Bot"
+                            git config user.email "jenkins@ci.com"
+
+                            if ! command -v yq &> /dev/null; then
+                              sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+                              sudo chmod +x /usr/local/bin/yq
+                            fi
+
+                            NEW_IMAGE=${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
+                            yq -i '.deployment.image = "'"${NEW_IMAGE}"'"' helm-charts/backend/values.yaml
+
+                            git add helm-charts/backend/values.yaml
+                            git commit -m "chore(backend): update image tag to ${COMMIT_SHA}
+
+Automated update from Jenkins pipeline
+Commit: ${GIT_COMMIT}
+Build: ${BUILD_NUMBER}"
+
+                            git push origin main
+
+                            echo "Successfully updated backend image to: ${NEW_IMAGE}"
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Backend CI pipeline completed successfully!'
+        }
+        failure {
+            echo 'Backend CI pipeline failed!'
+        }
+    }
 }
