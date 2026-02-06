@@ -137,12 +137,12 @@ jobs:
       - name: Docker image build
         working-directory: ./src/backend
         run: |
-          docker build -t backend-app:${{ env.COMMIT_SHA }} .
+          docker build -t reddit-backend:${{ env.COMMIT_SHA }} .
 
       - name: Trivy - Scan Docker Image for Vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: backend-app:${{ env.COMMIT_SHA }}
+          image-ref: reddit-backend:${{ env.COMMIT_SHA }}
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
@@ -162,11 +162,11 @@ jobs:
 
       - name: Tag Docker image for ECR
         run: |
-          docker tag backend-app:${{ env.COMMIT_SHA }} ${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}
+          docker tag reddit-backend:${{ env.COMMIT_SHA }} ${{ secrets.AWS_ECR_ACCOUNT_URL }}/reddit-backend:${{ env.COMMIT_SHA }}
 
       - name: Push Docker image to ECR
         run: |
-          docker push ${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}
+          docker push ${{ secrets.AWS_ECR_ACCOUNT_URL }}/reddit-backend:${{ env.COMMIT_SHA }}
 
       - name: Update Helm Values in CD Repository
         env:
@@ -182,7 +182,7 @@ jobs:
           git config user.email "actions@github.com"
           
           # Update the backend image tag in values.yaml
-          NEW_IMAGE="${{ secrets.AWS_ECR_ACCOUNT_URL }}/backend-app:${{ env.COMMIT_SHA }}"
+          NEW_IMAGE="${{ secrets.AWS_ECR_ACCOUNT_URL }}/reddit-backend:${{ env.COMMIT_SHA }}"
           
           # Use yq to update the image value (install yq first)
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
