@@ -45,6 +45,9 @@ ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS')
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.list('DJANGO_CORS_ALLOWED_ORIGINS', default=[])
 
+# CSRF trusted origins (required for Django 4.x with HTTPS)
+CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=[])
+
 # For development, allow all origins (remove in production)
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
