@@ -79,7 +79,7 @@ jobs:
         working-directory: ./src/frontend
         run: |
           cat > .env.local << EOF
-          NEXT_PUBLIC_API_URL=/api
+          NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
           EOF
 
       - name: Run ESLint
@@ -130,7 +130,7 @@ jobs:
         working-directory: ./src/frontend
         run: |
           docker build \
-            --build-arg NEXT_PUBLIC_API_URL=/api \
+            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
             -t reddit-frontend:${{ env.COMMIT_SHA }} .
 
       - name: Trivy - Scan Docker Image for Vulnerabilities
