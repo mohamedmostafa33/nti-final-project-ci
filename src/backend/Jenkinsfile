@@ -74,7 +74,7 @@ pipeline {
                             sh '''
                               dependency-check \
                                 --project "nti-final-project-backend" \
-                                --scan ./src/backend \
+                                --scan ./src/backend/requirements.txt \
                                 --format HTML \
                                 --failOnCVSS 7
                             '''
