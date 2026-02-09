@@ -7,14 +7,19 @@ pipeline {
             choices: ['False', 'True'],
             description: 'Trigger backend build and tests'
         )
+        booleanParam(
+            name: 'SKIP_OWASP',
+            defaultValue: false,
+            description: 'Skip OWASP Dependency Check (one-time)'
+        )
     }
 
     environment {
-        USE_S3          = 'True'
-        AWS_REGION      = 'us-east-1'
-        BACKEND_CHANGED = 'false'
-        COMMIT_SHA      = ''
-        PATH            = "${env.HOME}/.local/bin:${env.PATH}"
+        USE_S3           = 'True'
+        AWS_REGION       = 'us-east-1'
+        BACKEND_CHANGED  = 'false'
+        COMMIT_SHA       = ''
+        PATH             = "${env.HOME}/.local/bin:${env.PATH}"
     }
 
     stages {
@@ -38,10 +43,10 @@ pipeline {
 
                     if (changes) {
                         env.BACKEND_CHANGED = 'true'
-                        echo "Backend changes detected"
+                        echo 'Backend changes detected'
                     } else {
                         env.BACKEND_CHANGED = 'false'
-                        echo "No backend changes detected"
+                        echo 'No backend changes detected'
                     }
 
                     echo "Backend changed: ${env.BACKEND_CHANGED}"
@@ -69,6 +74,9 @@ pipeline {
                 }
 
                 stage('OWASP Dependency Check') {
+                    when {
+                        expression { !params.SKIP_OWASP }
+                    }
                     steps {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
                             sh '''
