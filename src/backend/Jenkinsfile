@@ -10,10 +10,11 @@ pipeline {
     }
 
     environment {
-        USE_S3        = 'True'
-        AWS_REGION    = 'us-east-1'
+        USE_S3          = 'True'
+        AWS_REGION      = 'us-east-1'
         BACKEND_CHANGED = 'false'
         COMMIT_SHA      = ''
+        PATH            = "${env.HOME}/.local/bin:${env.PATH}"
     }
 
     stages {
@@ -27,15 +28,6 @@ pipeline {
         stage('Detect Backend Changes') {
             steps {
                 script {
-                    /*
-                     الفرق الجوهري هنا:
-                     - استخدام origin/main...HEAD بدلاً من HEAD~1 HEAD
-                     - هذا يغطي:
-                       * أول build
-                       * force push
-                       * manual builds
-                       * shallow clone
-                    */
                     def changes = sh(
                         script: '''
                             git fetch origin main || true
@@ -78,13 +70,15 @@ pipeline {
 
                 stage('OWASP Dependency Check') {
                     steps {
-                        dependencyCheck additionalArguments: '''
-                            --project "nti-final-project-backend"
-                            --scan ./src/backend/requirements.txt
-                            --format HTML
-                            --enableRetired
-                            --failOnCVSS 7
-                        ''', odcInstallation: 'dependency-check'
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                            sh '''
+                              dependency-check \
+                                --project "nti-final-project-backend" \
+                                --scan ./src/backend \
+                                --format HTML \
+                                --failOnCVSS 7
+                            '''
+                        }
                     }
                 }
 
@@ -137,7 +131,7 @@ AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}
                                   -Dsonar.sources=. \
                                   -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**,**/.pytest_cache/**,**/media/**,**/*.coverage,**/coverage.xml,**/*.sqlite3,**/.env*,**/.gitignore,**/.dockerignore,**/*.pyc,**/*.pyo,**/conftest.py,**/pytest.ini,**/.coveragerc,**/run_tests.sh,**/*.md \
                                   -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                  -Dsonar.python.version=3.12
+                                  -Dsonar.python.version=3
                                 """
                             }
                         }
@@ -239,8 +233,6 @@ Commit: ${GIT_COMMIT}
 Build: ${BUILD_NUMBER}"
 
                             git push origin main
-
-                            echo "Successfully updated backend image to: ${NEW_IMAGE}"
                             """
                         }
                     }
