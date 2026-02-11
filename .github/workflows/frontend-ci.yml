@@ -196,3 +196,29 @@ jobs:
           git push origin main
           
           echo "Successfully updated frontend image to: ${NEW_IMAGE}"
+
+      - name: Notify n8n (Success)
+        if: success()
+        run: |
+          curl -X  POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "status": "success",
+            "repo": "${{ github.repository }}",
+            "commit": "${{ github.sha }}",
+            "actor": "${{ github.actor }}",
+            "env": "production"
+          }'
+
+      - name: Notify n8n (Failure)
+        if: failure()
+        run: |
+          curl -X  POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "status": "failure",
+            "repo": "${{ github.repository }}",
+            "commit": "${{ github.sha }}",
+            "actor": "${{ github.actor }}",
+            "env": "production"
+          }'
