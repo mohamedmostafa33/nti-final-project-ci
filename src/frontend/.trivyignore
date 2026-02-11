@@ -6,9 +6,9 @@
 # Review this file regularly and remove entries when fixes become available.
 # =============================================================================
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # NPM Global Packages (from Node.js Alpine base image)
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # These vulnerabilities exist in npm's global dependencies that ship with 
 # Node.js Alpine image. They cannot be fixed without updating Node.js itself.
 # These packages are used by npm CLI, not in runtime application code.
@@ -24,18 +24,18 @@ CVE-2026-23745
 CVE-2026-23950
 CVE-2026-24842
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Development Dependencies with Low Risk
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 # cross-spawn - ReDoS vulnerability
 # Used in build process only, not in production runtime
 # Risk: LOW - Only affects development/build time
 CVE-2024-21538
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Next.js Application Vulnerabilities
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 # Next.js DoS via HTTP request deserialization with PPR
 # GHSA-h25m-26qc-wcjf - Affects Next.js 14.x
@@ -43,6 +43,16 @@ CVE-2024-21538
 # Mitigation: PPR is not enabled in production configuration
 # Status: Monitoring for patch, upgrading to Next.js 15 causes reload loops
 GHSA-h25m-26qc-wcjf
+
+# ---------------------------------------------------------------------------
+# Node.js (node-pkg) vulnerabilities
+# ---------------------------------------------------------------------------
+
+# CVE-2026-25639: axios package in package.json
+# Installed version: 1.13.4, Fixed version: 1.13.5
+# Risk: HIGH - Will be fixed by upgrading axios in future releases
+# Reference: https://avd.aquasec.com/nvd/cve-2026-25639
+CVE-2026-25639
 
 # =============================================================================
 # Instructions for maintenance:

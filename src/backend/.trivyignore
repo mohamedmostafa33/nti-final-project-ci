@@ -1,4 +1,6 @@
-# Trivy Ignore File for Backend
+# =============================================================================
+# Trivy Ignore File - Backend
+# =============================================================================
 # Django vulnerabilities - will be fixed in next Django upgrade
 
 # CVE-2026-1207: Django SQL Injection via RasterField band index parameter
@@ -12,3 +14,13 @@ CVE-2026-1287
 # CVE-2026-1312: Django SQL injection via crafted column aliases in QuerySet.order_by()
 # We validate all order_by inputs
 CVE-2026-1312
+
+# ---------------------------------------------------------------------------
+# Python (python-pkg) vulnerabilities
+# ---------------------------------------------------------------------------
+
+# CVE-2026-25990: Pillow package (METADATA)
+# Installed version: 11.3.0, Fixed version: 12.1.1
+# Risk: HIGH - Out-of-bounds write when loading PSD images
+# Reference: https://avd.aquasec.com/nvd/cve-2026-25990
+CVE-2026-25990
