@@ -2,89 +2,60 @@ pipeline {
     agent any
 
     parameters {
-        choice(
-            name: 'BUILD_BACKEND',
-            choices: ['False', 'True'],
-            description: 'Trigger backend build and tests'
-        )
-        booleanParam(
-            name: 'SKIP_OWASP',
-            defaultValue: false,
-            description: 'Skip OWASP Dependency Check (one-time)'
-        )
+        choice(name: 'BUILD_BACKEND', choices: ['False', 'True'], description: 'Trigger backend build and tests')
+        booleanParam(name: 'SKIP_OWASP', defaultValue: false, description: 'Skip OWASP Scan')
+        booleanParam(name: 'UPDATE_CD', defaultValue: true, description: 'Update CD repository')
     }
 
     environment {
-        USE_S3           = 'True'
-        AWS_REGION       = 'us-east-1'
-        BACKEND_CHANGED  = 'false'
-        COMMIT_SHA       = ''
-        PATH             = "${env.HOME}/.local/bin:${env.PATH}"
+        USE_S3      = 'False'
+        AWS_REGION  = 'us-east-1'
+        PATH        = "${env.HOME}/.local/bin:${env.PATH}"
+        NVD_API_KEY = credentials('nvd-api-key')
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/mohamedmostafa33/nti-final-project-ci.git'
             }
         }
 
         stage('Detect Backend Changes') {
             steps {
                 script {
-                    def changes = sh(
-                        script: '''
-                            git fetch origin main || true
-                            git diff --name-only origin/main...HEAD | grep '^src/backend/' || true
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    if (changes) {
-                        env.BACKEND_CHANGED = 'true'
-                        echo 'Backend changes detected'
-                    } else {
-                        env.BACKEND_CHANGED = 'false'
-                        echo 'No backend changes detected'
-                    }
-
+                    def changes = sh(script: "git fetch origin main && git diff --name-only origin/main...HEAD | grep '^src/backend/' || true", returnStdout: true).trim()
+                    env.BACKEND_CHANGED = changes ? 'true' : 'false'
                     echo "Backend changed: ${env.BACKEND_CHANGED}"
                 }
             }
         }
 
         stage('Build and Test Backend') {
-            when {
-                expression {
-                    env.BACKEND_CHANGED == 'true' || params.BUILD_BACKEND == 'True'
-                }
-            }
-
+            when { expression { env.BACKEND_CHANGED == 'true' || params.BUILD_BACKEND == 'True' } }
             stages {
-
-                stage('Setup Python & Install Dependencies') {
+                stage('Setup Python & Dependencies') {
                     steps {
                         sh '''
                             python3 --version
                             python3 -m pip install --upgrade pip
-                            pip install -r ./src/backend/requirements.txt
+                            pip install -r src/backend/requirements.txt
                         '''
                     }
                 }
 
                 stage('OWASP Dependency Check') {
-                    when {
-                        expression { !params.SKIP_OWASP }
-                    }
+                    when { expression { !params.SKIP_OWASP } }
                     steps {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
                             sh '''
-                              dependency-check \
-                                --project "nti-final-project-backend" \
-                                --scan ./src/backend/requirements.txt \
-                                --format HTML \
-                                --failOnCVSS 7
+                                mkdir -p /var/lib/jenkins/dependency-check-data
+                                /opt/dependency-check/bin/dependency-check.sh \
+                                  --project "backend" --scan src/backend/requirements.txt \
+                                  --format HTML --data /var/lib/jenkins/dependency-check-data \
+                                  --nvdApiKey ${NVD_API_KEY} --disableOssIndex --failOnCVSS 7
                             '''
                         }
                     }
@@ -93,7 +64,7 @@ pipeline {
                 stage('Create .env File') {
                     steps {
                         dir('src/backend') {
-                            writeFile file: '.env', text: """USE_S3=${env.USE_S3}
+                            writeFile file: '.env', text: """USE_S3=False
 DJANGO_SECRET_KEY=${env.DJANGO_SECRET_KEY}
 DJANGO_DEBUG=True
 DATABASE_URL=sqlite:///./db.sqlite3
@@ -110,46 +81,11 @@ AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}
                     }
                 }
 
-                stage('Run Migrations') {
+                stage('Run Migrations & Tests') {
                     steps {
                         dir('src/backend') {
                             sh 'python3 manage.py migrate'
-                        }
-                    }
-                }
-
-                stage('Run Tests with Coverage') {
-                    steps {
-                        dir('src/backend') {
                             sh 'pytest --cov --cov-report=term-missing --cov-report=xml:coverage.xml'
-                        }
-                    }
-                }
-
-                stage('SonarQube Analysis') {
-                    steps {
-                        script {
-                            def scannerHome = tool 'SonarQubeScanner'
-                            withSonarQubeEnv('SonarQube') {
-                                sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=nti-final-project-backend \
-                                  -Dsonar.projectName="NTI Final Project - Backend" \
-                                  -Dsonar.projectBaseDir=src/backend \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**,**/.pytest_cache/**,**/media/**,**/*.coverage,**/coverage.xml,**/*.sqlite3,**/.env*,**/.gitignore,**/.dockerignore,**/*.pyc,**/*.pyo,**/conftest.py,**/pytest.ini,**/.coveragerc,**/run_tests.sh,**/*.md \
-                                  -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                  -Dsonar.python.version=3
-                                """
-                            }
-                        }
-                    }
-                }
-
-                stage('SonarQube Quality Gate') {
-                    steps {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: false
                         }
                     }
                 }
@@ -162,86 +98,84 @@ AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}
                     }
                 }
 
-                stage('Build Docker Image') {
+                stage('SonarQube Analysis') {
                     steps {
                         script {
-                            env.COMMIT_SHA = sh(
-                                script: 'git rev-parse --short HEAD',
-                                returnStdout: true
-                            ).trim()
-
-                            dir('src/backend') {
-                                sh "docker build -t reddit-backend:${env.COMMIT_SHA} ."
+                            def scannerHome = tool 'SonarQubeScanner'
+                            withSonarQubeEnv('SonarQube') {
+                                sh 'rm -rf .scannerwork'
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      -Dsonar.projectKey=nti-final-project-backend \
+                                      -Dsonar.projectName="NTI Final Project - Backend" \
+                                      -Dsonar.projectBaseDir=src/backend \
+                                      -Dsonar.sources=. \
+                                      -Dsonar.exclusions=**/migrations/**,**/tests.py,**/test_*.py,**/__pycache__/**,**/htmlcov/**,**/staticfiles/**,**/.pytest_cache/**,**/media/**,**/*.coverage,**/coverage.xml,**/*.sqlite3,**/.env*,**/*.pyc \
+                                      -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                      -Dsonar.python.version=3
+                                """
                             }
                         }
                     }
                 }
 
-                stage('Trivy Security Scan') {
+                stage('SonarQube Quality Gate') {
                     steps {
-                        sh """
-                        trivy image \
-                          --severity CRITICAL,HIGH \
-                          --exit-code 1 \
-                          --ignore-unfixed \
-                          --ignorefile src/backend/.trivyignore \
-                          reddit-backend:${env.COMMIT_SHA}
-                        """
-                    }
-                }
-
-                stage('Push Image to ECR') {
-                    steps {
-                        withCredentials([
-                            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                            string(credentialsId: 'aws-ecr-account-url', variable: 'AWS_ECR_ACCOUNT_URL')
-                        ]) {
-                            sh """
-                            aws ecr get-login-password --region ${AWS_REGION} | \
-                              docker login --username AWS --password-stdin ${AWS_ECR_ACCOUNT_URL}
-
-                            docker tag reddit-backend:${COMMIT_SHA} \
-                              ${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
-
-                            docker push ${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
-                            """
+                        timeout(time: 10, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: false
                         }
                     }
                 }
 
-                stage('Update CD Repository') {
+                stage('Docker Build & Push') {
                     steps {
-                        withCredentials([
-                            string(credentialsId: 'cd-repo-token', variable: 'CD_REPO_TOKEN'),
-                            string(credentialsId: 'cd-repo-url', variable: 'CD_REPO_URL'),
-                            string(credentialsId: 'aws-ecr-account-url', variable: 'AWS_ECR_ACCOUNT_URL')
-                        ]) {
+                        script {
+                            env.COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                            
+                            dir('src/backend') {
+                                sh "docker build -t reddit-backend:${env.COMMIT_SHA} ."
+                            }
+
                             sh """
-                            rm -rf cd-repo
-                            git clone https://${CD_REPO_TOKEN}@github.com/${CD_REPO_URL}.git cd-repo
-                            cd cd-repo
-
-                            git config user.name "Jenkins Bot"
-                            git config user.email "jenkins@ci.com"
-
-                            if ! command -v yq &> /dev/null; then
-                              sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-                              sudo chmod +x /usr/local/bin/yq
-                            fi
-
-                            NEW_IMAGE=${AWS_ECR_ACCOUNT_URL}/reddit-backend:${COMMIT_SHA}
-                            yq -i '.deployment.image = "'"${NEW_IMAGE}"'"' helm-charts/backend/values.yaml
-
-                            git add helm-charts/backend/values.yaml
-                            git commit -m "chore(backend): update image tag to ${COMMIT_SHA}
-
-Automated update from Jenkins pipeline
-Commit: ${GIT_COMMIT}
-Build: ${BUILD_NUMBER}"
-
-                            git push origin main
+                                trivy image --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
+                                  --ignorefile src/backend/.trivyignore reddit-backend:${env.COMMIT_SHA}
                             """
+
+                            withAWS(credentials: 'aws-credentials', region: "${env.AWS_REGION}") {
+                                withCredentials([string(credentialsId: 'AWS_ECR_ACCOUNT_URL', variable: 'ECR_URL')]) {
+                                    sh """
+                                        aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin ${ECR_URL}
+                                        docker tag reddit-backend:${env.COMMIT_SHA} ${ECR_URL}/reddit-backend:${env.COMMIT_SHA}
+                                        docker push ${ECR_URL}/reddit-backend:${env.COMMIT_SHA}
+                                    """
+                                    
+                                    if (params.UPDATE_CD) {
+                                        withCredentials([
+                                            string(credentialsId: 'CD_REPO_TOKEN', variable: 'CD_TOKEN'),
+                                            string(credentialsId: 'CD_REPO_URL', variable: 'CD_URL')
+                                        ]) {
+                                            sh """
+                                                rm -rf cd-repo
+                                                git clone https://${CD_TOKEN}@github.com/${CD_URL}.git cd-repo
+                                                cd cd-repo
+                                                git config user.name "Jenkins CI"
+                                                git config user.email "jenkins@ci.local"
+                                                
+                                                yq -i '.deployment.image = "${ECR_URL}/reddit-backend:${env.COMMIT_SHA}"' helm-charts/backend/values.yaml
+                                                
+                                                # Check if the image tag actually changed before committing
+                                                if [ -n "\$(git status --porcelain)" ]; then
+                                                    git add .
+                                                    git commit -m "chore: update backend image to ${env.COMMIT_SHA}"
+                                                    git push origin main
+                                                else
+                                                    echo "No changes detected in CD repo. Skipping Git push."
+                                                fi
+                                            """
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -252,12 +186,7 @@ Build: ${BUILD_NUMBER}"
     post {
         always {
             cleanWs()
-        }
-        success {
-            echo 'Backend CI pipeline completed successfully!'
-        }
-        failure {
-            echo 'Backend CI pipeline failed!'
+            sh 'docker image prune -f || true'
         }
     }
 }
