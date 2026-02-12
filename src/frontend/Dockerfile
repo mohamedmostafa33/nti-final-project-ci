@@ -19,7 +19,7 @@ RUN npm ci --legacy-peer-deps
 # ==============================================================================
 # Stage 2: Builder - Build the Next.js application
 # ==============================================================================
-FROM node:18-alpine3.21 AS builder
+FROM node:20-alpine3.21 AS builder
 
 # Security: Update OpenSSL
 RUN apk update && apk upgrade --no-cache
@@ -46,7 +46,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 3: Runner - Create minimal production image
 # ==============================================================================
-FROM node:18-alpine3.21 AS runner
+FROM node:20-alpine3.21 AS runner
 
 # Security: Update OpenSSL to fix CVE-2025-15467, CVE-2025-69419, CVE-2025-69421
 RUN apk update && apk upgrade --no-cache && \
