@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: Dependencies - Install all node_modules
 # ==============================================================================
-FROM node:18-alpine3.21 AS deps
+FROM node:20-alpine3.21 AS deps
 
 # Security: Update OpenSSL to fix CVE-2025-15467, CVE-2025-69419, CVE-2025-69421
 RUN apk update && apk upgrade --no-cache && \
